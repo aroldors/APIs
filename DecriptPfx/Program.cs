@@ -16,6 +16,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// Adiciona o middleware de autenticação com API Key
+app.UseMiddleware<ApiKeyMiddleware>();
+
 app.UseHttpsRedirection();
 
 // Instanciar o serviço de descriptografia
