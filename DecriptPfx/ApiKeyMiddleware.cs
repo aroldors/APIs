@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 public class ApiKeyMiddleware
 {
     private readonly RequestDelegate _next;
@@ -7,7 +9,7 @@ public class ApiKeyMiddleware
     public ApiKeyMiddleware(RequestDelegate next, IConfiguration configuration)
     {
         _next = next;
-        _validApiKey = configuration.GetValue<string>("ApiKey");
+       _validApiKey = configuration.GetValue<string>("ApiKey") ?? throw new ArgumentNullException(nameof(_validApiKey), "API Key cannot be null");
     }
 
     public async Task InvokeAsync(HttpContext context)
