@@ -1,4 +1,15 @@
+using DecriptPfx.Services;
+
 var builder = WebApplication.CreateBuilder(args);
+
+
+// Registrar o serviço de validação de API Key
+builder.Services.AddSingleton<IApiKeyValidatorService, ApiKeyValidatorService>();
+
+// Configuração da autenticação por API Key
+builder.Services.AddAuthentication("ApiKeyScheme")
+    .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>("ApiKeyScheme", null);
+
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -7,7 +18,12 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
 
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -24,7 +40,7 @@ app.UseHttpsRedirection();
 // Instanciar o serviço de descriptografia
 var certificadoService = new CertificadoService();
 
-app.MapPost("/descriptografar", async (IFormFile certificado, string senha) =>
+app.MapPost("/descriptografar", [Authorize(AuthenticationSchemes = "ApiKeyScheme")] async (IFormFile certificado, string senha) =>
 {
     if (certificado == null || string.IsNullOrEmpty(senha))
     {
