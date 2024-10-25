@@ -71,10 +71,10 @@ app.UseHttpsRedirection();
 // Instanciar o serviço de descriptografia
 var certificadoService = new CertificadoService();
 
-//app.MapPost("/descriptografar", [Authorize(AuthenticationSchemes = "ApiKeyScheme")] async (IFormFile certificado, string senha) =>
-app.MapPost("/descriptografar", [Authorize(AuthenticationSchemes = "ApiKeyScheme")] async (string path, string certificado, string senha) =>
+//app.MapPost("/descriptografar", [Authorize(AuthenticationSchemes = "ApiKeyScheme")] async (string path, string certificado, string senha) =>
+app.MapPost("/descriptografar", [Authorize(AuthenticationSchemes = "ApiKeyScheme")] async (IFormFile certificado, string senha) =>
 {
-    if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(certificado) || string.IsNullOrEmpty(senha))
+    if ((certificado == null) || (string.IsNullOrEmpty(senha)))
     {
         return Results.BadRequest("Certificado e senha são obrigatórios.");
     }
@@ -82,18 +82,17 @@ app.MapPost("/descriptografar", [Authorize(AuthenticationSchemes = "ApiKeyScheme
     try
     {
         // Combinar o caminho e o nome do arquivo para obter o caminho completo
-        var fullPath = Path.Combine(path, certificado);        
+        //var fullPath = Path.Combine(path, certificado);        
         
-        /*
+        // Ler o arquivo como um array de bytes
+        //var certificadoBytes = File.ReadAllBytes(fullPath);
+
+        
         // Converter o arquivo recebido em um array de bytes
         using var memoryStream = new MemoryStream();
         await certificado.CopyToAsync(memoryStream);
         var certificadoBytes = memoryStream.ToArray();
-        */
-
-        // Ler o arquivo como um array de bytes
-        var certificadoBytes = File.ReadAllBytes(fullPath);
-
+        
         // Utilizar o serviço para descriptografar o certificado
         var info = certificadoService.DescriptografarCertificado(certificadoBytes, senha);
 
@@ -104,6 +103,6 @@ app.MapPost("/descriptografar", [Authorize(AuthenticationSchemes = "ApiKeyScheme
     {
         return Results.Problem($"Erro ao processar o certificado: {ex.Message}");
     }
-});
+}).DisableAntiforgery();
 
 app.Run();
