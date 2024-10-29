@@ -74,6 +74,7 @@ var certificadoService = new CertificadoService();
 //app.MapPost("/descriptografar", [Authorize(AuthenticationSchemes = "ApiKeyScheme")] async (string path, string certificado, string senha) =>
 app.MapPost("/descriptografar", [Authorize(AuthenticationSchemes = "ApiKeyScheme")] async (IFormFile certificado, string senha) =>
 {
+    //if ((certificado == null) || (string.IsNullOrEmpty(senha)))
     if ((certificado == null) || (string.IsNullOrEmpty(senha)))
     {
         return Results.BadRequest("Certificado e senha são obrigatórios.");
