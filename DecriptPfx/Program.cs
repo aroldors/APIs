@@ -1,29 +1,28 @@
-using DecriptPfx.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi.Models;
+using DecriptPfx.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
 
 // Registrar o serviço de validação de API Key
-builder.Services.AddSingleton<IApiKeyValidatorService, ApiKeyValidatorService>();
+//builder.Services.AddSingleton<IApiKeyValidatorService, ApiKeyValidatorService>();
 
 // Configuração da autenticação por API Key
-builder.Services.AddAuthentication("ApiKeyScheme").AddScheme<AuthenticationSchemeOptions,ApiKeyMiddleware>("ApiKeyScheme", null);
-
+//builder.Services.AddAuthentication("ApiKeyScheme").AddScheme<AuthenticationSchemeOptions, ApiKeyMiddleware>("ApiKeyScheme", null);
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+//builder.Services.AddHttpContextAccessor();
+
 builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
 
 builder.Services.AddAuthorization();
 
-
-builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo { Title = "DecriptPfx", Version = "v1" });
@@ -56,7 +55,7 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-app.UseAuthentication();
+//app.UseAuthentication();
 app.UseAuthorization();
 
 // Configure the HTTP request pipeline.
@@ -66,13 +65,15 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseMiddleware<ApiKeyMiddleware>();
 app.UseHttpsRedirection();
 
 // Instanciar o serviço de descriptografia
 var certificadoService = new CertificadoService();
 
 //app.MapPost("/descriptografar", [Authorize(AuthenticationSchemes = "ApiKeyScheme")] async (string path, string certificado, string senha) =>
-app.MapPost("/descriptografar", [Authorize(AuthenticationSchemes = "ApiKeyScheme")] async (IFormFile certificado, string senha) =>
+//app.MapPost("/descriptografar", [Authorize(AuthenticationSchemes = "ApiKeyScheme")] async (IFormFile certificado, string senha) =>
+app.MapPost("/descriptografar", async (IFormFile certificado, string senha) =>
 {
     //if ((certificado == null) || (string.IsNullOrEmpty(senha)))
     if ((certificado == null) || (string.IsNullOrEmpty(senha)))
