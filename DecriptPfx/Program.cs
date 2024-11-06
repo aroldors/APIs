@@ -1,28 +1,28 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.OpenApi.Models;
-using DecriptPfx.Middleware;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using DecriptPfx.Models;
+using DecriptPfx.JwtBearer;
+using DecriptPfx.ExternalApi;
 
 var builder = WebApplication.CreateBuilder(args);
-
 
 // Registrar o serviço de validação de API Key
 //builder.Services.AddSingleton<IApiKeyValidatorService, ApiKeyValidatorService>();
 
 // Configuração da autenticação por API Key
 //builder.Services.AddAuthentication("ApiKeyScheme").AddScheme<AuthenticationSchemeOptions, ApiKeyMiddleware>("ApiKeyScheme", null);
-
-// Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-//builder.Services.AddHttpContextAccessor();
-
 builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
 
-builder.Services.AddAuthorization();
+builder.Services.AddHttpClient<ExternalApiService>();
 
+// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo { Title = "DecriptPfx", Version = "v1" });
@@ -53,10 +53,27 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-var app = builder.Build();
+builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+    }).AddJwtBearer(options =>
+    {
+        options.RequireHttpsMetadata = false;
+        options.SaveToken = true;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey (Encoding.UTF8.GetBytes(AppSettingsService.JwtSettings.Key)),
+            ValidateIssuer = false,
+            ValidateAudience = false
+        };
+    });
 
-//app.UseAuthentication();
-app.UseAuthorization();
+builder.Services.AddAuthorization();
+
+var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -65,11 +82,19 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseMiddleware<ApiKeyMiddleware>();
+//app.UseMiddleware<ApiKeyMiddleware>();
 app.UseHttpsRedirection();
 
 // Instanciar o serviço de descriptografia
 var certificadoService = new CertificadoService();
+
+app.MapPost("/autenticar", (User user) =>
+{
+    return Results.Ok(JwtBearerService.GenerateToken(user));
+});
+
+
+app.MapGet("/teste", () => "Teste de autenticação!").RequireAuthorization();
 
 //app.MapPost("/descriptografar", [Authorize(AuthenticationSchemes = "ApiKeyScheme")] async (string path, string certificado, string senha) =>
 //app.MapPost("/descriptografar", [Authorize(AuthenticationSchemes = "ApiKeyScheme")] async (IFormFile certificado, string senha) =>
@@ -106,5 +131,8 @@ app.MapPost("/descriptografar", async (IFormFile certificado, string senha) =>
         return Results.Problem($"Erro ao processar o certificado: {ex.Message}");
     }
 }).DisableAntiforgery();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.Run();

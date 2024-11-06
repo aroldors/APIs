@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Encodings.Web;
 
 namespace DecriptPfx.Middleware
@@ -9,7 +10,7 @@ namespace DecriptPfx.Middleware
     public class ApiKeyMiddleware
     {
         private readonly RequestDelegate _next;
-        private const string ApiKeyHeaderName = "ApiKey"; //"X-Api-Key";
+        private const string ApiKeyHeaderName = "x-api-key";
         private readonly string _validApiKey;
 
         public ApiKeyMiddleware(RequestDelegate next, IConfiguration configuration)
@@ -19,8 +20,8 @@ namespace DecriptPfx.Middleware
         }
 
         public async Task InvokeAsync(HttpContext context)
-        {
-            if (!context.Request.Headers.TryGetValue(ApiKeyHeaderName, out var extractedApiKey))
+        {            
+            if (!context.Request.Headers.TryGetValue((ApiKeyHeaderName), out var extractedApiKey))
             {
                 context.Response.StatusCode = 401;
                 await context.Response.WriteAsync("Chave de API não informada!");
