@@ -1,5 +1,3 @@
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.OpenApi.Models;
 using Microsoft.IdentityModel.Tokens;
@@ -7,6 +5,13 @@ using System.Text;
 using DecriptPfx.Models;
 using DecriptPfx.JwtBearer;
 using DecriptPfx.ExternalApi;
+using Supabase;
+using Supabase.Storage;
+using System.Net.Http.Headers;
+using Newtonsoft.Json;
+using Microsoft.AspNetCore.Mvc;
+using Newtonsoft.Json.Linq;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,7 +25,7 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddAWSLambdaHosting(LambdaEventSource.HttpApi);
 
-builder.Services.AddHttpClient<ExternalApiService>();
+builder.Services.AddHttpClient<EdgeFunctionService>();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddSwaggerGen(options =>
@@ -88,40 +93,79 @@ app.UseHttpsRedirection();
 // Instanciar o serviço de descriptografia
 var certificadoService = new CertificadoService();
 
-app.MapPost("/autenticar", (User user) =>
-{
-    return Results.Ok(JwtBearerService.GenerateToken(user));
-});
+app.MapPost("/autenticar", async (User user) =>
+{                 
+    // Cria uma instância de HttpClient
+    var httpClient = new HttpClient();
 
+    // Cria uma instância do ExternalApiService passando o HttpClient
+    var edgeFunctionService = new EdgeFunctionService(httpClient);    
+    
+    // Chama o método CallExternalApiAsync e obtém o resultado
+    var result = await edgeFunctionService.CallEdgeFunctionAsync(user.Token);
+    
+    // Recupera o objeto JSON da resposta
+    var jsonResult = (result as JsonResult)?.Value;
+
+    if (jsonResult != null)
+    {
+        // Parse o objeto JSON para um JObject
+        var jsonObject = JObject.FromObject(jsonResult);
+
+        // Acesse a propriedade que deseja (no caso, "isLoggedIn")
+        string isLoggedIn = jsonObject["isLoggedIn"]?.ToString() ?? "false";        
+        
+        if (isLoggedIn == "True")
+            return Results.Ok(JwtBearerService.GenerateToken(user));
+    }
+
+    return Results.Unauthorized();
+});
 
 app.MapGet("/teste", () => "Teste de autenticação!").RequireAuthorization();
 
 //app.MapPost("/descriptografar", [Authorize(AuthenticationSchemes = "ApiKeyScheme")] async (string path, string certificado, string senha) =>
 //app.MapPost("/descriptografar", [Authorize(AuthenticationSchemes = "ApiKeyScheme")] async (IFormFile certificado, string senha) =>
-app.MapPost("/descriptografar", async (IFormFile certificado, string senha) =>
+app.MapPost("/descriptografar", async (Certificado certificado) =>
 {
-    //if ((certificado == null) || (string.IsNullOrEmpty(senha)))
-    if ((certificado == null) || (string.IsNullOrEmpty(senha)))
-    {
+    if ((certificado == null)) 
         return Results.BadRequest("Certificado e senha são obrigatórios.");
-    }
 
     try
     {
-        // Combinar o caminho e o nome do arquivo para obter o caminho completo
-        //var fullPath = Path.Combine(path, certificado);        
-        
-        // Ler o arquivo como um array de bytes
-        //var certificadoBytes = File.ReadAllBytes(fullPath);
+        var url = "https://sasqneudlipdhxmdonli.supabase.co"; //Environment.GetEnvironmentVariable("SUPABASE_URL");
+        var key = Environment.GetEnvironmentVariable("SUPABASE_ANON_KEY");        
+              
+        // Inicializar o cliente Supabase
+        var supabase = new Supabase.Client(url, key);
+        await supabase.InitializeAsync();
 
+        var storage = supabase.Storage;
+        var bucket = storage.From(certificado.Bucket);
+
+        // Realizar a requisição de download do arquivo
+        using var httpClient = new HttpClient();
+        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", key);
         
+        // Construir a URL completa para o arquivo
+        var fileUrl = $"https://sasqneudlipdhxmdonli.supabase.co/storage/v1/object/public/{certificado.Bucket}/{certificado.FileName}";
+
+        // Fazer a solicitação HTTP para baixar o arquivo
+        var response = await httpClient.GetAsync(fileUrl);
+        if (!response.IsSuccessStatusCode)
+        {
+            return Results.BadRequest("O arquivo do certificado não foi encontrado ou houve um erro na solicitação.");
+        }    
+        
+        var certificadoBytes = await response.Content.ReadAsByteArrayAsync();
+                
         // Converter o arquivo recebido em um array de bytes
-        using var memoryStream = new MemoryStream();
-        await certificado.CopyToAsync(memoryStream);
-        var certificadoBytes = memoryStream.ToArray();
-        
+        //using var memoryStream = new MemoryStream();
+        //await certificado.CopyToAsync(memoryStream);
+        //var certificadoBytes = memoryStream.ToArray();
+             
         // Utilizar o serviço para descriptografar o certificado
-        var info = certificadoService.DescriptografarCertificado(certificadoBytes, senha);
+        var info = certificadoService.DescriptografarCertificado(certificadoBytes, certificado.Password);
 
         // Retornar as informações em JSON
         return Results.Json(info);
@@ -130,7 +174,9 @@ app.MapPost("/descriptografar", async (IFormFile certificado, string senha) =>
     {
         return Results.Problem($"Erro ao processar o certificado: {ex.Message}");
     }
-}).DisableAntiforgery();
+})
+.DisableAntiforgery()
+.RequireAuthorization();
 
 app.UseAuthentication();
 app.UseAuthorization();
